@@ -3,33 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>قارئ الكتب الإلكترونية المتقدم</title>
+    <title>قارئ صحيح البخاري الذكي</title>
     
-    <!-- Google Fonts - Cairo for Beautiful Arabic Typography -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-
-    <!-- Dependencies: JSZip must be loaded before ePub.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.5/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/epubjs/0.3.88/epub.min.js"></script>
+    <!-- 1. Script Loading Order: JSZip first, then epub.js, then Tailwind & Fonts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/epub.js/0.3.88/epub.min.js"></script>
     
-    <!-- Tailwind CSS CDN -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
-                    fontFamily: {
-                        cairo: ['Cairo', 'sans-serif'],
-                    },
                     colors: {
                         sepia: {
-                            50: '#fbf0e3',
-                            100: '#faedd9',
-                            200: '#f5dcb3',
-                            900: '#433422',
+                            50: '#fbf0d9',
+                            100: '#faecd0',
+                            200: '#f7dfb3',
+                            300: '#f3cc8f',
+                            400: '#eeaf61',
+                            900: '#432c0e',
+                            950: '#261605',
                         }
                     }
                 }
@@ -37,816 +32,425 @@
         }
     </script>
 
+    <!-- Google Fonts for professional Arabic Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <style>
         body {
             font-family: 'Cairo', sans-serif;
-            -webkit-tap-highlight-color: transparent;
         }
-        /* Custom scrollbar for webkit */
+        .arabic-text {
+            font-family: 'Amiri', serif;
+        }
+        /* Custom scrollbar for ultra-dense TOC */
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
         }
         ::-webkit-scrollbar-track {
-            background: transparent;
+            background: rgba(0,0,0,0.05);
         }
         ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 3px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 4px;
         }
-        .dark ::-webkit-scrollbar-thumb {
-            background: #475569;
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0,0,0,0.4);
         }
-        /* Hide default epubjs navigation controls if any */
-        iframe {
-            color-scheme: light dark;
+        /* Sepia Theme Class Overrides */
+        .theme-sepia {
+            background-color: #fbf0d9 !important;
+            color: #432c0e !important;
+        }
+        .theme-sepia .bg-panel {
+            background-color: #faecd0 !important;
+            border-color: #e6d5b3 !important;
+        }
+        .theme-sepia .text-muted {
+            color: #70532c !important;
+        }
+        .theme-sepia .hover-item:hover {
+            background-color: #f3cc8f !important;
         }
     </style>
 </head>
-<body class="h-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 transition-colors duration-300 overflow-hidden flex flex-col">
+<body class="h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300">
 
-    <!-- Full-screen Loading Overlay -->
-    <div id="loading-overlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900 text-white p-6 text-center">
-        <div class="relative flex items-center justify-center mb-6">
-            <div class="animate-spin rounded-full h-24 w-24 border-b-4 border-t-4 border-blue-500"></div>
-            <div class="absolute text-blue-500 font-bold text-xl">ePub</div>
+    <!-- Loading Screen Overlay with dynamic pulse -->
+    <div id="loading-overlay" class="fixed inset-0 bg-slate-950 z-50 flex flex-col items-center justify-center text-white p-6 transition-all duration-500">
+        <div class="relative flex items-center justify-center mb-8">
+            <div class="absolute animate-ping h-24 w-24 rounded-full bg-emerald-500 opacity-20"></div>
+            <div class="absolute animate-pulse h-16 w-16 rounded-full bg-emerald-600 opacity-40"></div>
+            <div class="relative rounded-full p-6 bg-slate-900 border border-emerald-500/30 shadow-lg shadow-emerald-500/10">
+                <i class="fa-solid fa-book-open text-4xl text-emerald-400"></i>
+            </div>
         </div>
-        <h2 id="loading-status" class="text-2xl font-bold mb-3 tracking-wide animate-pulse">جاري تهيئة النظام...</h2>
-        <p id="loading-substatus" class="text-sm text-gray-400 max-w-md">يرجى الانتظار بينما نقوم بإعداد بيئة القراءة وتجهيز الأصول الفنية.</p>
         
-        <!-- Progress Bar -->
-        <div class="w-64 bg-gray-800 rounded-full h-1.5 mt-6 overflow-hidden">
-            <div id="loading-progress" class="bg-blue-500 h-1.5 rounded-full transition-all duration-300" style="width: 10%;"></div>
+        <h2 class="text-xl md:text-2xl font-bold text-center mb-4 max-w-md leading-relaxed text-emerald-100">
+            جاري تفكيك وفهرسة 1946 باباً من صحيح البخاري، برجاء الانتظار...
+        </h2>
+        
+        <div class="w-64 bg-slate-800 rounded-full h-1.5 mb-3 overflow-hidden">
+            <div id="loading-progress" class="bg-emerald-500 h-1.5 rounded-full transition-all duration-300" style="width: 15%"></div>
         </div>
+        <p id="loading-status" class="text-sm text-slate-400 animate-pulse">جاري فك ضغط الملف المعقد...</p>
     </div>
 
-    <!-- Error Overlay (Hidden by Default) -->
-    <div id="error-overlay" class="fixed inset-0 z-50 hidden flex-col items-center justify-center bg-slate-900 text-white p-6 text-center">
-        <div class="bg-red-900/30 border border-red-500/50 p-8 rounded-2xl max-w-lg shadow-2xl">
-            <svg class="mx-auto h-16 w-16 text-red-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-            </svg>
-            <h2 class="text-2xl font-bold mb-2">فشل تحميل الكتاب</h2>
-            <p id="error-message" class="text-gray-300 mb-6 text-sm leading-relaxed"></p>
-            <button onclick="window.location.reload()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-6 rounded-xl transition duration-200">
-                إعادة المحاولة
-            </button>
-        </div>
-    </div>
+    <!-- Main Container Layout -->
+    <div class="flex h-screen w-screen overflow-hidden relative">
 
-    <!-- Main App Header -->
-    <header class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between shadow-sm z-30 transition-colors duration-300">
-        <div class="flex items-center gap-3">
-            <button id="sidebar-toggle" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition" title="قائمة المحتويات">
-                <svg class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                </svg>
-            </button>
-            <h1 id="book-title" class="text-base md:text-lg font-bold text-gray-800 dark:text-gray-100 truncate max-w-[180px] md:max-w-xs">جاري تحميل الكتاب...</h1>
-        </div>
-
-        <!-- Controls Panel -->
-        <div class="flex items-center gap-1 md:gap-3">
-            <!-- Font Size Control -->
-            <div class="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
-                <button id="font-decrease" class="p-1.5 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition text-xs font-bold" title="تصغير الخط">أ-</button>
-                <span id="font-size-display" class="text-xs px-2 font-semibold text-gray-600 dark:text-gray-400">100%</span>
-                <button id="font-increase" class="p-1.5 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition text-xs font-bold" title="تكبير الخط">أ+</button>
+        <!-- Sidebar: Table of Contents (Optimized for 1,946 Chapters) -->
+        <aside id="sidebar" class="fixed inset-y-0 right-0 z-40 w-80 transform translate-x-full lg:translate-x-0 lg:relative flex flex-col bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 transition-transform duration-300 ease-in-out bg-panel">
+            <!-- Sidebar Header -->
+            <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-layer-group text-emerald-600 dark:text-emerald-400"></i>
+                    <h3 class="font-bold text-lg">أبواب صحيح البخاري</h3>
+                </div>
+                <span id="chapter-count" class="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-xs px-2.5 py-1 rounded-full font-semibold">1,946 باباً</span>
             </div>
 
-            <!-- Theme Switcher -->
-            <button id="theme-toggle" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition" title="تبديل المظهر">
-                <!-- Sun Icon -->
-                <svg id="theme-sun" class="w-5 h-5 text-amber-500 hidden" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.46 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"/>
-                </svg>
-                <!-- Moon Icon -->
-                <svg id="theme-moon" class="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
-                </svg>
-            </button>
-
-            <!-- Sepia Mode Switcher -->
-            <button id="theme-sepia" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition text-amber-800 dark:text-amber-300 font-bold text-xs" title="وضع الورق القديم">
-                بيج
-            </button>
-
-            <!-- Bookmark Button -->
-            <button id="bookmark-toggle" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition" title="حفظ العلامة المرجعية">
-                <svg id="bookmark-icon" class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
-                </svg>
-            </button>
-        </div>
-    </header>
-
-    <!-- Main Content Area -->
-    <div class="flex-1 flex relative overflow-hidden">
-        
-        <!-- Sidebar (Table of Contents / Bookmarks / Search) -->
-        <aside id="sidebar" class="fixed inset-y-0 right-0 z-40 w-80 transform translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 flex flex-col shadow-2xl md:shadow-none md:static md:translate-x-0">
-            <!-- Sidebar Header & Tabs -->
-            <div class="p-4 border-b border-gray-200 dark:border-gray-800">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="font-bold text-lg text-gray-800 dark:text-gray-100">لوحة التحكم</h3>
-                    <button id="sidebar-close" class="md:hidden p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                    </button>
-                </div>
-                
-                <!-- Tab Controls -->
-                <div class="flex border-b border-gray-100 dark:border-gray-800 text-sm">
-                    <button id="tab-toc-btn" class="flex-1 pb-2 font-bold border-b-2 border-blue-500 text-blue-600 dark:text-blue-400">الفهرس</button>
-                    <button id="tab-bookmarks-btn" class="flex-1 pb-2 text-gray-500 dark:text-gray-400 border-b-2 border-transparent hover:text-gray-700">العلامات</button>
-                    <button id="tab-search-btn" class="flex-1 pb-2 text-gray-500 dark:text-gray-400 border-b-2 border-transparent hover:text-gray-700">البحث</button>
+            <!-- Search inside TOC for fast access -->
+            <div class="p-3 border-b border-slate-200 dark:border-slate-800">
+                <div class="relative">
+                    <input type="text" id="toc-search" placeholder="ابحث في الأبواب..." class="w-full pl-3 pr-9 py-2 text-sm bg-slate-100 dark:bg-slate-800 border-none rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-slate-900 dark:text-slate-100">
+                    <i class="fa-solid fa-magnifying-glass absolute right-3 top-2.5 text-slate-400 text-sm"></i>
                 </div>
             </div>
 
-            <!-- Tab Contents Container -->
-            <div class="flex-1 overflow-y-auto p-4 space-y-4">
-                <!-- TOC Tab -->
-                <div id="tab-toc" class="space-y-1">
-                    <div id="toc-container" class="space-y-1">
-                        <!-- Dynamic TOC goes here -->
-                    </div>
-                </div>
-
-                <!-- Bookmarks Tab -->
-                <div id="tab-bookmarks" class="hidden space-y-2">
-                    <p class="text-xs text-gray-400 mb-2">انقر على العلامة المرجعية للانتقال مباشرة للصفحة المحفوظة.</p>
-                    <div id="bookmarks-container" class="space-y-1">
-                        <!-- Saved bookmarks list -->
-                    </div>
-                </div>
-
-                <!-- Search Tab -->
-                <div id="tab-search" class="hidden space-y-4">
-                    <div class="relative">
-                        <input id="search-input" type="text" placeholder="اكتب للبحث في الكتاب..." class="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-2 px-4 pl-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <button id="search-submit" class="absolute left-3 top-2.5 text-gray-400 hover:text-blue-500">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                            </svg>
-                        </button>
-                    </div>
-                    <div id="search-results-status" class="text-xs text-gray-400"></div>
-                    <div id="search-results-container" class="space-y-2 max-h-[400px] overflow-y-auto">
-                        <!-- Search results -->
-                    </div>
-                </div>
+            <!-- Asynchronous Scrollable TOC Container -->
+            <div id="toc-container" class="flex-1 overflow-y-auto p-2 space-y-1 text-right">
+                <!-- Loaded items dynamically in chunks to prevent UI freeze -->
+            </div>
+            
+            <!-- Sidebar Footer / Pagination Status -->
+            <div class="p-3 bg-slate-50 dark:bg-slate-950/50 border-t border-slate-200 dark:border-slate-800 text-xs text-center text-muted text-slate-500">
+                تم تحميل <span id="rendered-toc-count">0</span> من أصل <span id="total-toc-count">0</span>
             </div>
         </aside>
 
-        <!-- Main Viewer Window -->
-        <main class="flex-1 flex flex-col relative bg-white dark:bg-gray-950 transition-colors duration-300">
-            <!-- Sidebar Overlay for Mobile -->
-            <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 opacity-0 pointer-events-none transition-opacity duration-300 md:hidden"></div>
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col h-full overflow-hidden relative">
+            
+            <!-- Navigation Header Bar -->
+            <header class="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 md:px-6 flex items-center justify-between bg-panel z-30 shadow-sm">
+                <!-- Right Controls: Sidebar Toggle & Title -->
+                <div class="flex items-center gap-3">
+                    <button id="sidebar-toggle" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus:outline-none" aria-label="Toggle Sidebar">
+                        <i class="fa-solid fa-bars text-lg"></i>
+                    </button>
+                    <div class="hidden md:block">
+                        <h1 class="font-bold text-slate-800 dark:text-slate-100 text-base md:text-lg truncate max-w-xs lg:max-w-md">صحيح البخاري</h1>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">الجامع المسند الصحيح المختصر</p>
+                    </div>
+                </div>
 
-            <!-- ePub Render Target -->
-            <div id="viewer-container" class="flex-1 relative w-full h-full px-4 md:px-12 py-6">
-                <!-- Left/Right Hotspots for click-to-turn-page (Hidden on touch devices if desired, or styled minimal) -->
-                <button id="prev-page-btn" class="absolute right-0 top-0 bottom-0 w-8 md:w-16 flex items-center justify-center bg-gradient-to-l from-black/[0.02] to-transparent hover:from-black/[0.05] dark:from-white/[0.01] dark:hover:from-white/[0.03] transition-all group z-20" title="الصفحة السابقة">
-                    <span class="p-2 rounded-full bg-white/80 dark:bg-gray-800/80 shadow-md transform translate-x-2 group-hover:translate-x-0 transition opacity-0 group-hover:opacity-100 hidden md:block">
-                        <svg class="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                        </svg>
-                    </span>
+                <!-- Center: Quick Navigation Info -->
+                <div id="current-chapter-title" class="hidden lg:block text-sm font-semibold text-emerald-600 dark:text-emerald-400 truncate max-w-sm">
+                    جاري تحميل الباب الحالي...
+                </div>
+
+                <!-- Left Controls: Typography, Themes, Layout -->
+                <div class="flex items-center gap-1.5 md:gap-3">
+                    <!-- Font Size Controls -->
+                    <div class="flex items-center border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-800">
+                        <button id="font-dec" class="px-3 py-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm font-bold" title="تصغير الخط">-</button>
+                        <span class="px-2.5 py-1.5 text-xs font-semibold border-x border-slate-200 dark:border-slate-800 select-none">A</span>
+                        <button id="font-inc" class="px-3 py-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm font-bold" title="تكبير الخط">+</button>
+                    </div>
+
+                    <!-- Theme Selector -->
+                    <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                        <button onclick="changeTheme('light')" class="w-8 h-8 rounded-md flex items-center justify-center transition-all hover:bg-white dark:hover:bg-slate-700" title="مظهر مضيء">
+                            <i class="fa-solid fa-sun text-amber-500 text-sm"></i>
+                        </button>
+                        <button onclick="changeTheme('sepia')" class="w-8 h-8 rounded-md flex items-center justify-center transition-all hover:bg-amber-100 text-sepia-900" title="مظهر مريح (سيبيا)">
+                            <i class="fa-solid fa-eye text-sm"></i>
+                        </button>
+                        <button onclick="changeTheme('dark')" class="w-8 h-8 rounded-md flex items-center justify-center transition-all hover:bg-slate-950 text-slate-400" title="مظهر مظلم">
+                            <i class="fa-solid fa-moon text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Book Viewer Container (Optimized Sandbox) -->
+            <div class="flex-1 relative bg-slate-50 dark:bg-slate-950 transition-colors duration-300 flex items-center justify-center p-4">
+                <div id="viewer" class="w-full h-full max-w-4xl bg-white dark:bg-slate-900 shadow-xl border border-slate-200/60 dark:border-slate-800/60 rounded-2xl overflow-hidden bg-panel">
+                    <!-- epub.js iframe renders here -->
+                </div>
+
+                <!-- Hover/Floating Navigation Buttons -->
+                <button id="prev-btn" class="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white dark:bg-slate-800 shadow-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-emerald-500 hover:text-white dark:hover:bg-emerald-600 transition-all z-20 focus:outline-none" title="الباب السابق">
+                    <i class="fa-solid fa-chevron-right text-lg"></i>
                 </button>
-
-                <!-- The Actual Book Frame Target -->
-                <div id="viewer" class="w-full h-full"></div>
-
-                <button id="next-page-btn" class="absolute left-0 top-0 bottom-0 w-8 md:w-16 flex items-center justify-center bg-gradient-to-r from-black/[0.02] to-transparent hover:from-black/[0.05] dark:from-white/[0.01] dark:hover:from-white/[0.03] transition-all group z-20" title="الصفحة التالية">
-                    <span class="p-2 rounded-full bg-white/80 dark:bg-gray-800/80 shadow-md transform -translate-x-2 group-hover:translate-x-0 transition opacity-0 group-hover:opacity-100 hidden md:block">
-                        <svg class="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-                        </svg>
-                    </span>
+                <button id="next-btn" class="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white dark:bg-slate-800 shadow-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-emerald-500 hover:text-white dark:hover:bg-emerald-600 transition-all z-20 focus:outline-none" title="الباب التالي">
+                    <i class="fa-solid fa-chevron-left text-lg"></i>
                 </button>
             </div>
 
-            <!-- Reading Progress Footer Controls -->
-            <footer class="bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-800 px-6 py-4 flex flex-col gap-3 transition-colors duration-300">
-                <div class="flex items-center justify-between text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    <span id="current-chapter" class="truncate max-w-[200px] md:max-w-md">الفصل الحالي</span>
-                    <span id="reading-percentage">0% مقروء</span>
-                </div>
-                
-                <!-- Progress Bar Slider -->
+            <!-- Footer Status / Navigation Metadata -->
+            <footer class="h-10 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 bg-panel">
+                <div id="book-progress">جاري حساب التقدم...</div>
                 <div class="flex items-center gap-4">
-                    <span class="text-xs font-bold text-gray-400">البداية</span>
-                    <input id="progress-slider" type="range" min="0" max="100" value="0" step="1" class="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500 focus:outline-none">
-                    <span class="text-xs font-bold text-gray-400">النهاية</span>
+                    <span id="book-location">الموقع: --</span>
                 </div>
             </footer>
         </main>
     </div>
 
-    <!-- SPA Application Engine -->
+    <!-- Main Logic Execution -->
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            // --- State Management ---
+        document.addEventListener("DOMContentLoaded", () => {
+            // Path configuration
             const BOOK_PATH = "./79565.epub";
-            const CACHE_NAME = "epub-reader-cache-v1";
             
-            let book = null;
-            let rendition = null;
-            let displayed = null;
-            let bookLocations = null;
+            // Initialization of elements
+            const loadingOverlay = document.getElementById("loading-overlay");
+            const loadingProgress = document.getElementById("loading-progress");
+            const loadingStatus = document.getElementById("loading-status");
+            const viewer = document.getElementById("viewer");
+            const prevBtn = document.getElementById("prev-btn");
+            const nextBtn = document.getElementById("next-btn");
+            const sidebar = document.getElementById("sidebar");
+            const sidebarToggle = document.getElementById("sidebar-toggle");
+            const currentChapterTitle = document.getElementById("current-chapter-title");
+            const tocContainer = document.getElementById("toc-container");
+            const tocSearch = document.getElementById("toc-search");
+            const renderedTocCountEl = document.getElementById("rendered-toc-count");
+            const totalTocCountEl = document.getElementById("total-toc-count");
             
-            // App state stored in localStorage
-            let appState = {
-                theme: localStorage.getItem("epub-theme") || "light", // light, dark, sepia
-                fontSize: parseInt(localStorage.getItem("epub-font-size")) || 100,
-                lastLocation: localStorage.getItem("epub-last-location") || null,
-                bookmarks: JSON.parse(localStorage.getItem("epub-bookmarks")) || []
+            let book, rendition;
+            let currentFontSize = 115; // default comfortable font size (percentage)
+            let originalTocItems = [];
+            let filteredTocItems = [];
+            let renderedCount = 0;
+            const CHUNK_SIZE = 40; // Render small chunks to prevent main-thread freeze
+            let currentTheme = localStorage.getItem("reader-theme") || "light";
+
+            // Initialize Epub.js
+            try {
+                updateLoadingState(30, "جاري فتح الأرشيف واستخراج البيانات...");
+                book = ePub(BOOK_PATH);
+                
+                // Optimized Rendition Setup (Lazy Loading & Chunk Rendering)
+                rendition = book.renderTo("viewer", {
+                    width: "100%",
+                    height: "100%",
+                    spread: "none",
+                    flow: "scrolled-doc", // Better for massive text documents to scrolling smoothly
+                    allowScriptedContent: false // Security & speed optimization
+                });
+
+                // Load initial location
+                rendition.display();
+
+                // Set initial theme and typography
+                rendition.themes.fontSize(`${currentFontSize}%`);
+                applyTheme(currentTheme);
+
+            } catch (err) {
+                console.error("Error loading epub:", err);
+                loadingStatus.textContent = "حدث خطأ أثناء تحميل الكتاب. يرجى التحقق من وجود الملف في المسار الصحيح.";
+                loadingStatus.classList.add("text-red-500");
+            }
+
+            // Hook up book loaded events
+            book.ready.then(() => {
+                updateLoadingState(60, "جاري معالجة الهيكل الداخلي للمجلدات...");
+            });
+
+            // 3. Asynchronous Table of Contents Engine
+            book.loaded.navigation.then((navigation) => {
+                updateLoadingState(85, "جاري بناء الفهرس الذكي (1946 باباً)...");
+                
+                // Flatten navigation array if nested
+                originalTocItems = flattenToc(navigation.toc);
+                filteredTocItems = [...originalTocItems];
+                
+                totalTocCountEl.textContent = originalTocItems.length;
+                document.getElementById("chapter-count").textContent = `${originalTocItems.length} باباً`;
+                
+                // Start safe, non-blocking asynchronous rendering loop
+                renderedCount = 0;
+                tocContainer.innerHTML = "";
+                renderTocChunksAsync();
+            });
+
+            // Non-blocking TOC generator using requestAnimationFrame to yield to the main thread
+            function renderTocChunksAsync() {
+                if (renderedCount >= filteredTocItems.length) {
+                    // All elements processed, hide loading screen smoothly
+                    setTimeout(() => {
+                        loadingOverlay.classList.add("opacity-0", "pointer-events-none");
+                    }, 500);
+                    return;
+                }
+
+                const fragment = document.createDocumentFragment();
+                const limit = Math.min(renderedCount + CHUNK_SIZE, filteredTocItems.length);
+
+                for (let i = renderedCount; i < limit; i++) {
+                    const item = filteredTocItems[i];
+                    const btn = document.createElement("button");
+                    btn.className = "w-full text-right px-3 py-2.5 text-sm rounded-lg hover-item hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-150 truncate block border-b border-slate-100/50 dark:border-slate-800/30 font-medium text-slate-700 dark:text-slate-300";
+                    
+                    // Clean chapter titles
+                    const titleText = item.label ? item.label.replace(/[\r\n\t]+/g, " ").trim() : `باب ${i + 1}`;
+                    btn.textContent = titleText;
+                    btn.title = titleText;
+
+                    btn.addEventListener("click", () => {
+                        rendition.display(item.href);
+                        // Auto-close sidebar on mobile viewports
+                        if (window.innerWidth < 1024) {
+                            sidebar.classList.add("translate-x-full");
+                        }
+                    });
+
+                    fragment.appendChild(btn);
+                }
+
+                tocContainer.appendChild(fragment);
+                renderedCount = limit;
+                renderedTocCountEl.textContent = renderedCount;
+
+                // Yield control to browser to paint UI, preventing freeze
+                requestAnimationFrame(renderTocChunksAsync);
+            }
+
+            // Helper to flatten nested epub TOC structure safely
+            function flattenToc(toc) {
+                let temp = [];
+                toc.forEach(item => {
+                    temp.push(item);
+                    if (item.subitems && item.subitems.length > 0) {
+                        temp = temp.concat(flattenToc(item.subitems));
+                    }
+                });
+                return temp;
+            }
+
+            // Search logic within TOC with debounce
+            let searchTimeout;
+            tocSearch.addEventListener("input", (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    const query = e.target.value.toLowerCase().trim();
+                    tocContainer.innerHTML = "";
+                    renderedCount = 0;
+
+                    if (query === "") {
+                        filteredTocItems = [...originalTocItems];
+                    } else {
+                        filteredTocItems = originalTocItems.filter(item => 
+                            item.label && item.label.toLowerCase().includes(query)
+                        );
+                    }
+                    
+                    renderTocChunksAsync();
+                }, 250);
+            });
+
+            // Sync navigation locations and display metadata
+            rendition.on("relocated", (location) => {
+                const percent = book.locations.percentageFromCfi(location.start.cfi);
+                const percentageString = percent >= 0 ? `${Math.round(percent * 100)}%` : "--";
+                
+                document.getElementById("book-progress").textContent = `التقدم المقدر: ${percentageString}`;
+                document.getElementById("book-location").textContent = `الموقع: ${location.start.displayed.page} / ${location.end.displayed.page}`;
+
+                // Try to resolve current chapter title in header
+                if (book.navigation && location.start.cfi) {
+                    const chapter = book.navigation.get(location.start.cfi);
+                    if (chapter && chapter.label) {
+                        currentChapterTitle.textContent = chapter.label.trim();
+                    } else {
+                        currentChapterTitle.textContent = "صحيح البخاري - أبواب منوعة";
+                    }
+                }
+            });
+
+            // UI Interaction Handlers
+            prevBtn.addEventListener("click", () => {
+                rendition.prev();
+            });
+
+            nextBtn.addEventListener("click", () => {
+                rendition.next();
+            });
+
+            // Keyboard support
+            document.addEventListener("keyup", (e) => {
+                if (e.key === "ArrowLeft") rendition.next();
+                if (e.key === "ArrowRight") rendition.prev();
+            });
+
+            // Font Size Adjustments
+            document.getElementById("font-inc").addEventListener("click", () => {
+                currentFontSize = Math.min(currentFontSize + 10, 250);
+                rendition.themes.fontSize(`${currentFontSize}%`);
+            });
+
+            document.getElementById("font-dec").addEventListener("click", () => {
+                currentFontSize = Math.max(currentFontSize - 10, 80);
+                rendition.themes.fontSize(`${currentFontSize}%`);
+            });
+
+            // Sidebar Toggle
+            sidebarToggle.addEventListener("click", () => {
+                sidebar.classList.toggle("translate-x-full");
+            });
+
+            // Dynamic loading screen updater helper
+            function updateLoadingState(percent, statusText) {
+                loadingProgress.style.width = `${percent}%`;
+                loadingStatus.textContent = statusText;
+            }
+
+            // Global theme switcher function (accessible via HTML inline click)
+            window.changeTheme = function(theme) {
+                const html = document.documentElement;
+                
+                // Reset classes
+                html.classList.remove("dark", "theme-sepia");
+                document.body.classList.remove("theme-sepia");
+                
+                // Apply specific theme
+                if (theme === "dark") {
+                    html.classList.add("dark");
+                    rendition.themes.register("dark", {
+                        "body": { "background-color": "#0f172a", "color": "#f1f5f9" },
+                        "p": { "font-family": "Amiri, serif !important", "line-height": "1.8" }
+                    });
+                    rendition.themes.select("dark");
+                } else if (theme === "sepia") {
+                    html.classList.add("theme-sepia");
+                    document.body.classList.add("theme-sepia");
+                    rendition.themes.register("sepia", {
+                        "body": { "background-color": "#fbf0d9", "color": "#432c0e" },
+                        "p": { "font-family": "Amiri, serif !important", "line-height": "1.8" }
+                    });
+                    rendition.themes.select("sepia");
+                } else {
+                    rendition.themes.register("light", {
+                        "body": { "background-color": "#ffffff", "color": "#0f172a" },
+                        "p": { "font-family": "Amiri, serif !important", "line-height": "1.8" }
+                    });
+                    rendition.themes.select("light");
+                }
+                
+                localStorage.setItem("reader-theme", theme);
             };
 
-            // --- Cache Engine & Initialization ---
-            const loadingOverlay = document.getElementById("loading-overlay");
-            const loadingStatus = document.getElementById("loading-status");
-            const loadingProgress = document.getElementById("loading-progress");
-            const errorOverlay = document.getElementById("error-overlay");
-            const errorMessage = document.getElementById("error-message");
-
-            function updateLoadingState(status, percentage) {
-                loadingStatus.textContent = status;
-                loadingProgress.style.width = `${percentage}%`;
+            function applyTheme(theme) {
+                window.changeTheme(theme);
             }
-
-            function showError(msg) {
-                loadingOverlay.classList.add("hidden");
-                errorOverlay.classList.remove("hidden");
-                errorMessage.textContent = msg;
-            }
-
-            async function loadBookData() {
-                try {
-                    updateLoadingState("جاري التحقق من الذاكرة المؤقتة...", 20);
-                    
-                    // Native Cache API check
-                    if ('caches' in window) {
-                        const cache = await caches.open(CACHE_NAME);
-                        let cachedResponse = await cache.match(BOOK_PATH);
-
-                        if (!cachedResponse) {
-                            updateLoadingState("جاري تنزيل ملف الكتاب من الخادم...", 40);
-                            
-                            // Fetch with progress if possible, otherwise standard fetch
-                            const response = await fetch(BOOK_PATH);
-                            if (!response.ok) {
-                                throw new Error(`فشل تحميل الملف من المسار المحدد: ${response.statusText}`);
-                            }
-
-                            // Store in cache
-                            await cache.put(BOOK_PATH, response.clone());
-                            cachedResponse = response;
-                        }
-
-                        updateLoadingState("جاري معالجة وفك ضغط الكتاب...", 70);
-                        const arrayBuffer = await cachedResponse.arrayBuffer();
-                        initializeEpub(arrayBuffer);
-                    } else {
-                        // Fallback if Cache API is not supported
-                        updateLoadingState("جاري تحميل الكتاب مباشرة...", 50);
-                        const response = await fetch(BOOK_PATH);
-                        if (!response.ok) throw new Error("فشل تحميل الملف");
-                        const arrayBuffer = await response.arrayBuffer();
-                        initializeEpub(arrayBuffer);
-                    }
-                } catch (err) {
-                    console.error("Initialization error:", err);
-                    showError(err.message || "حدث خطأ غير متوقع أثناء محاولة تحميل الكتاب.");
-                }
-            }
-
-            function initializeEpub(bookData) {
-                updateLoadingState("جاري تهيئة محرك القراءة...", 85);
-                
-                try {
-                    // Initialize ePub.js with binary array data
-                    book = ePub(bookData);
-                    
-                    // Render rendition
-                    rendition = book.renderTo("viewer", {
-                        width: "100%",
-                        height: "100%",
-                        spread: "always",
-                        restore: true,
-                        flow: "paginated"
-                    });
-
-                    // Set default themes
-                    registerRenditionThemes();
-                    applyTheme(appState.theme);
-
-                    // Display initial page (either saved location or beginning)
-                    const targetLoc = appState.lastLocation || undefined;
-                    displayed = rendition.display(targetLoc);
-
-                    displayed.then(() => {
-                        updateLoadingState("جاري عرض الصفحة الأولى...", 95);
-                    });
-
-                    // Book is loaded completely
-                    book.ready.then(() => {
-                        // Generate locations for reading progress calculations
-                        return book.locations.generate(1024);
-                    }).then(() => {
-                        bookLocations = book.locations;
-                        updateProgressUI();
-                        // Hide loading overlay once fully rendered
-                        rendition.on("rendered", () => {
-                            loadingOverlay.classList.add("hidden");
-                        });
-                    }).catch(e => {
-                        // Fallback if location generation fails, we still want to read the book
-                        console.warn("Location generation failed, progress tracking might be limited.", e);
-                        loadingOverlay.classList.add("hidden");
-                    });
-
-                    // Build table of contents safely
-                    book.loaded.navigation.then(nav => {
-                        buildTOC(nav.toc);
-                    }).catch(err => {
-                        console.error("TOC Load error:", err);
-                        document.getElementById("toc-container").innerHTML = `<p class="text-sm text-red-500">فشل تحميل الفهرس</p>`;
-                    });
-
-                    // Set up event listeners for rendition
-                    setupRenditionListeners();
-
-                } catch (err) {
-                    showError("فشل في تحليل ملف الـ ePub. قد يكون الملف تالفاً.");
-                }
-            }
-
-            // --- Theme Handling ---
-            const themeSun = document.getElementById("theme-sun");
-            const themeMoon = document.getElementById("theme-moon");
-
-            function registerRenditionThemes() {
-                // Register Dark and Light modes inside the iframe
-                rendition.themes.register("light", {
-                    body: {
-                        "background-color": "#ffffff !important",
-                        "color": "#111827 !important",
-                        "font-family": "'Cairo', system-ui, sans-serif !important",
-                        "line-height": "1.8 !important",
-                        "direction": "rtl !important",
-                        "text-align": "justify !important"
-                    },
-                    p: { "font-size": "1.1rem !important", "margin-bottom": "1.25em !important" },
-                    a: { "color": "#2563eb !important" }
-                });
-
-                rendition.themes.register("dark", {
-                    body: {
-                        "background-color": "#030712 !important",
-                        "color": "#f9fafb !important",
-                        "font-family": "'Cairo', system-ui, sans-serif !important",
-                        "line-height": "1.8 !important",
-                        "direction": "rtl !important",
-                        "text-align": "justify !important"
-                    },
-                    p: { "font-size": "1.1rem !important", "margin-bottom": "1.25em !important" },
-                    a: { "color": "#60a5fa !important" }
-                });
-
-                rendition.themes.register("sepia", {
-                    body: {
-                        "background-color": "#fbf0e3 !important",
-                        "color": "#433422 !important",
-                        "font-family": "'Cairo', system-ui, sans-serif !important",
-                        "line-height": "1.8 !important",
-                        "direction": "rtl !important",
-                        "text-align": "justify !important"
-                    },
-                    p: { "font-size": "1.1rem !important", "margin-bottom": "1.25em !important" },
-                    a: { "color": "#b45309 !important" }
-                });
-            }
-
-            function applyTheme(themeName) {
-                appState.theme = themeName;
-                localStorage.setItem("epub-theme", themeName);
-
-                // Update UI classes
-                document.documentElement.classList.remove("dark", "sepia-mode");
-                
-                if (themeName === "dark") {
-                    document.documentElement.classList.add("dark");
-                    themeSun.classList.remove("hidden");
-                    themeMoon.classList.add("hidden");
-                } else if (themeName === "sepia") {
-                    // Custom Sepia Handling
-                    document.documentElement.classList.add("sepia-mode");
-                    document.body.className = "h-full bg-sepia-50 text-sepia-900 transition-colors duration-300 overflow-hidden flex flex-col";
-                    themeSun.classList.add("hidden");
-                    themeMoon.classList.remove("hidden");
-                } else {
-                    // Light mode
-                    document.body.className = "h-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 transition-colors duration-300 overflow-hidden flex flex-col";
-                    themeSun.classList.add("hidden");
-                    themeMoon.classList.remove("hidden");
-                }
-
-                // Apply inside iframe
-                if (rendition) {
-                    rendition.themes.select(themeName);
-                }
-            }
-
-            // Theme click actions
-            document.getElementById("theme-toggle").addEventListener("click", () => {
-                if (appState.theme === "dark") {
-                    applyTheme("light");
-                } else {
-                    applyTheme("dark");
-                }
-            });
-
-            document.getElementById("theme-sepia").addEventListener("click", () => {
-                if (appState.theme === "sepia") {
-                    applyTheme("light");
-                } else {
-                    applyTheme("sepia");
-                }
-            });
-
-            // --- Font Sizing ---
-            const fontSizeDisplay = document.getElementById("font-size-display");
-            
-            function applyFontSize(size) {
-                appState.fontSize = size;
-                localStorage.setItem("epub-font-size", size);
-                fontSizeDisplay.textContent = `${size}%`;
-                if (rendition) {
-                    rendition.themes.fontSize(`${size}%`);
-                }
-            }
-
-            document.getElementById("font-increase").addEventListener("click", () => {
-                if (appState.fontSize < 200) applyFontSize(appState.fontSize + 10);
-            });
-
-            document.getElementById("font-decrease").addEventListener("click", () => {
-                if (appState.fontSize > 70) applyFontSize(appState.fontSize - 10);
-            });
-
-
-            // --- TOC Safety Engine ---
-            function buildTOC(toc) {
-                const container = document.getElementById("toc-container");
-                container.innerHTML = "";
-
-                // Safety checks: Ensure TOC is parsed cleanly even if structured oddly
-                if (!toc || (!Array.isArray(toc) && typeof toc !== 'object')) {
-                    container.innerHTML = `<p class="text-sm text-gray-400">لا يوجد فهرس متاح لهذا الكتاب.</p>`;
-                    return;
-                }
-
-                const normalizedTOC = Array.isArray(toc) ? toc : [toc];
-                
-                if (normalizedTOC.length === 0) {
-                    container.innerHTML = `<p class="text-sm text-gray-400">لا يوجد فهرس متاح لهذا الكتاب.</p>`;
-                    return;
-                }
-
-                // Recursive renderer to safely handle nested structures
-                function renderItems(items, depth = 0) {
-                    items.forEach(item => {
-                        if (!item) return;
-
-                        const btn = document.createElement("button");
-                        btn.className = `w-full text-right py-2.5 px-3 rounded-xl text-sm transition-all duration-150 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium`;
-                        btn.style.paddingRight = `${(depth * 12) + 12}px`;
-
-                        // Visual hierarchy markers
-                        const bullet = document.createElement("span");
-                        bullet.className = depth === 0 
-                            ? "w-2 h-2 rounded-full bg-blue-500 shrink-0" 
-                            : "w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-gray-600 shrink-0";
-                        btn.appendChild(bullet);
-
-                        const labelText = document.createElement("span");
-                        labelText.textContent = (item.label || "فصل غير مسمى").trim();
-                        labelText.className = "truncate flex-1";
-                        btn.appendChild(labelText);
-
-                        btn.addEventListener("click", () => {
-                            if (item.href) {
-                                rendition.display(item.href);
-                                closeSidebar();
-                            }
-                        });
-
-                        container.appendChild(btn);
-
-                        // Safe check for subitems
-                        if (item.subitems && Array.isArray(item.subitems) && item.subitems.length > 0) {
-                            renderItems(item.subitems, depth + 1);
-                        }
-                    });
-                }
-
-                renderItems(normalizedTOC);
-            }
-
-            // --- Rendition Navigation & Progress Events ---
-            function setupRenditionListeners() {
-                // Page Navigation Buttons
-                document.getElementById("next-page-btn").addEventListener("click", () => {
-                    // In RTL layout, standard epubjs flow requires .prev() to go to next chronological page
-                    rendition.prev(); 
-                });
-
-                document.getElementById("prev-page-btn").addEventListener("click", () => {
-                    rendition.next();
-                });
-
-                // Keyboard Support
-                document.addEventListener("keyup", (e) => {
-                    if (e.key === "ArrowLeft") rendition.next();
-                    if (e.key === "ArrowRight") rendition.prev();
-                });
-
-                // Swipe Gesture Support inside iframe
-                let startX = 0;
-                rendition.on("touchstart", (event) => {
-                    startX = event.changedTouches[0].clientX;
-                });
-
-                rendition.on("touchend", (event) => {
-                    const endX = event.changedTouches[0].clientX;
-                    const diffX = startX - endX;
-                    // Swipe left to go next, right to go back
-                    if (diffX > 50) {
-                        rendition.next();
-                    } else if (diffX < -50) {
-                        rendition.prev();
-                    }
-                });
-
-                // Relocated state updates
-                rendition.on("relocated", (location) => {
-                    appState.lastLocation = location.start.cfi;
-                    localStorage.setItem("epub-last-location", location.start.cfi);
-
-                    updateProgressUI(location);
-                    updateBookmarkStatus(location.start.cfi);
-
-                    // Dynamic chapter name display
-                    if (book.navigation && book.navigation.get) {
-                        const chapter = book.navigation.get(location.start.href);
-                        if (chapter) {
-                            document.getElementById("current-chapter").textContent = chapter.label;
-                        }
-                    }
-                });
-
-                // Resize handler
-                window.addEventListener("resize", () => {
-                    if (rendition) rendition.resize();
-                });
-
-                // Apply font size and theme immediately after display is complete
-                rendition.on("rendered", () => {
-                    rendition.themes.fontSize(`${appState.fontSize}%`);
-                    rendition.themes.select(appState.theme);
-                });
-            }
-
-            function updateProgressUI(location) {
-                if (!bookLocations || !rendition) return;
-
-                const currentLocation = location || rendition.currentLocation();
-                if (currentLocation && currentLocation.start) {
-                    const progress = bookLocations.percentageFromCfi(currentLocation.start.cfi);
-                    const percentage = Math.round(progress * 100);
-                    
-                    document.getElementById("reading-percentage").textContent = `${percentage}% مقروء`;
-                    document.getElementById("progress-slider").value = percentage;
-                }
-            }
-
-            // Progress Slider action
-            document.getElementById("progress-slider").addEventListener("change", (e) => {
-                if (!bookLocations) return;
-                const targetPercentage = e.target.value / 100;
-                const targetCfi = bookLocations.cfiFromPercentage(targetPercentage);
-                rendition.display(targetCfi);
-            });
-
-
-            // --- Sidebar Toggle & Navigation Tabs ---
-            const sidebar = document.getElementById("sidebar");
-            const sidebarOverlay = document.getElementById("sidebar-overlay");
-
-            function openSidebar() {
-                sidebar.classList.remove("translate-x-full");
-                sidebarOverlay.classList.remove("opacity-0", "pointer-events-none");
-            }
-
-            function closeSidebar() {
-                sidebar.classList.add("translate-x-full");
-                sidebarOverlay.classList.add("opacity-0", "pointer-events-none");
-            }
-
-            document.getElementById("sidebar-toggle").addEventListener("click", openSidebar);
-            document.getElementById("sidebar-close").addEventListener("click", closeSidebar);
-            sidebarOverlay.addEventListener("click", closeSidebar);
-
-            // Tab toggles
-            const tabTocBtn = document.getElementById("tab-toc-btn");
-            const tabBookmarksBtn = document.getElementById("tab-bookmarks-btn");
-            const tabSearchBtn = document.getElementById("tab-search-btn");
-
-            const tabToc = document.getElementById("tab-toc");
-            const tabBookmarks = document.getElementById("tab-bookmarks");
-            const tabSearch = document.getElementById("tab-search");
-
-            function switchTab(activeBtn, activeTab) {
-                [tabTocBtn, tabBookmarksBtn, tabSearchBtn].forEach(btn => {
-                    btn.classList.remove("border-blue-500", "text-blue-600", "dark:text-blue-400");
-                    btn.classList.add("text-gray-500", "dark:text-gray-400", "border-transparent");
-                });
-                [tabToc, tabBookmarks, tabSearch].forEach(tab => tab.classList.add("hidden"));
-
-                activeBtn.classList.add("border-blue-500", "text-blue-600", "dark:text-blue-400");
-                activeBtn.classList.remove("text-gray-500", "dark:text-gray-400", "border-transparent");
-                activeTab.classList.remove("hidden");
-            }
-
-            tabTocBtn.addEventListener("click", () => switchTab(tabTocBtn, tabToc));
-            tabBookmarksBtn.addEventListener("click", () => {
-                switchTab(tabBookmarksBtn, tabBookmarks);
-                renderBookmarksList();
-            });
-            tabSearchBtn.addEventListener("click", () => switchTab(tabSearchBtn, tabSearch));
-
-
-            // --- Bookmarks Engine ---
-            const bookmarkIcon = document.getElementById("bookmark-icon");
-
-            function updateBookmarkStatus(cfi) {
-                const exists = appState.bookmarks.some(b => b.cfi === cfi);
-                if (exists) {
-                    bookmarkIcon.setAttribute("fill", "currentColor");
-                    bookmarkIcon.classList.add("text-blue-500");
-                } else {
-                    bookmarkIcon.setAttribute("fill", "none");
-                    bookmarkIcon.classList.remove("text-blue-500");
-                }
-            }
-
-            document.getElementById("bookmark-toggle").addEventListener("click", () => {
-                if (!rendition) return;
-                const currentLoc = rendition.currentLocation().start;
-                const currentCfi = currentLoc.cfi;
-                
-                const existingIndex = appState.bookmarks.findIndex(b => b.cfi === currentCfi);
-
-                if (existingIndex > -1) {
-                    // Remove bookmark
-                    appState.bookmarks.splice(existingIndex, 1);
-                } else {
-                    // Add bookmark
-                    let label = "علامة مرجعية مخصصة";
-                    if (book.navigation && book.navigation.get) {
-                        const chapter = book.navigation.get(currentLoc.href);
-                        if (chapter) label = chapter.label;
-                    }
-                    appState.bookmarks.push({
-                        cfi: currentCfi,
-                        label: label,
-                        date: new Date().toLocaleDateString('ar-EG')
-                    });
-                }
-
-                localStorage.setItem("epub-bookmarks", JSON.stringify(appState.bookmarks));
-                updateBookmarkStatus(currentCfi);
-                renderBookmarksList();
-            });
-
-            function renderBookmarksList() {
-                const container = document.getElementById("bookmarks-container");
-                container.innerHTML = "";
-
-                if (appState.bookmarks.length === 0) {
-                    container.innerHTML = `<p class="text-xs text-gray-400 text-center py-4">لا توجد علامات مرجعية محفوظة حالياً.</p>`;
-                    return;
-                }
-
-                appState.bookmarks.forEach((b, index) => {
-                    const div = document.createElement("div");
-                    div.className = "flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-sm";
-                    
-                    const btn = document.createElement("button");
-                    btn.className = "text-right flex-1 font-medium text-gray-700 dark:text-gray-300 truncate";
-                    btn.innerHTML = `<span class="block text-xs text-gray-400">${b.date}</span> ${b.label}`;
-                    btn.addEventListener("click", () => {
-                        rendition.display(b.cfi);
-                        closeSidebar();
-                    });
-
-                    const deleteBtn = document.createElement("button");
-                    deleteBtn.className = "p-1 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 rounded-md transition";
-                    deleteBtn.innerHTML = `
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                        </svg>
-                    `;
-                    deleteBtn.addEventListener("click", (e) => {
-                        e.stopPropagation();
-                        appState.bookmarks.splice(index, 1);
-                        localStorage.setItem("epub-bookmarks", JSON.stringify(appState.bookmarks));
-                        renderBookmarksList();
-                        updateBookmarkStatus(rendition.currentLocation().start.cfi);
-                    });
-
-                    div.appendChild(btn);
-                    div.appendChild(deleteBtn);
-                    container.appendChild(div);
-                });
-            }
-
-
-            // --- High-Performance Book Search Engine ---
-            const searchInput = document.getElementById("search-input");
-            const searchSubmit = document.getElementById("search-submit");
-            const searchStatus = document.getElementById("search-results-status");
-            const searchResultsContainer = document.getElementById("search-results-container");
-
-            async function performSearch() {
-                const query = searchInput.value.trim();
-                if (!query) return;
-
-                searchStatus.textContent = "جاري البحث في الصفحات...";
-                searchResultsContainer.innerHTML = `
-                    <div class="flex items-center justify-center p-6">
-                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                    </div>
-                `;
-
-                try {
-                    const results = await Promise.all(
-                        book.spine.spineItems.map(item => 
-                            item.load(book.load.bind(book))
-                                .then(item.find.bind(item, query))
-                                .finally(item.unload.bind(item))
-                        )
-                    );
-                    
-                    // Flatten search results
-                    const flatResults = [].concat.apply([], results);
-                    displaySearchResults(flatResults);
-                } catch (err) {
-                    console.error("Search error:", err);
-                    searchStatus.textContent = "فشل إجراء عملية البحث.";
-                    searchResultsContainer.innerHTML = "";
-                }
-            }
-
-            function displaySearchResults(results) {
-                searchResultsContainer.innerHTML = "";
-                if (results.length === 0) {
-                    searchStatus.textContent = "لم يتم العثور على نتائج للبحث المحدد.";
-                    return;
-                }
-
-                searchStatus.textContent = `تم العثور على ${results.length} نتيجة:`;
-
-                results.forEach(item => {
-                    const btn = document.createElement("button");
-                    btn.className = "w-full text-right p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 transition-all text-sm block";
-                    
-                    // Highlight the query word in excerpt
-                    const excerpt = item.excerpt.replace(
-                        new RegExp(searchInput.value.trim(), 'gi'),
-                        match => `<mark class="bg-amber-200 dark:bg-amber-900/60 dark:text-amber-200 px-1 rounded">${match}</mark>`
-                    );
-
-                    btn.innerHTML = `<p class="text-xs text-blue-500 mb-1">انقر للانتقال</p><p class="text-gray-600 dark:text-gray-300 leading-relaxed">${excerpt}</p>`;
-                    btn.addEventListener("click", () => {
-                        rendition.display(item.cfi);
-                        closeSidebar();
-                    });
-
-                    searchResultsContainer.appendChild(btn);
-                });
-            }
-
-            searchSubmit.addEventListener("click", performSearch);
-            searchInput.addEventListener("keypress", (e) => {
-                if (e.key === "Enter") performSearch();
-            });
-
-
-            // --- Start the App Engine ---
-            loadBookData();
         });
     </script>
 </body>
