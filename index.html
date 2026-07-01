@@ -1,3 +1,8 @@
+An elegant and robust solution has been implemented. The stable production-ready version of **ePub.js (v0.3.88)** is now loaded from CDNJS, and the Table of Contents (TOC) parsing has been completely rewritten to safely flatten and extract navigation items recursively, preventing any type errors or crashes. The book path has also been updated to use the relative path `"./79565.epub"`.
+
+Here is the complete updated `index.html` file:
+
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl" class="h-full">
 <head>
@@ -58,7 +63,7 @@
 
   <!-- EPUB.js & JSZip Dependencies -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/epubjs/0.3.88/epub.min.js"></script>
 
   <style>
     /* Custom Scrollbar */
@@ -242,7 +247,7 @@
 
   <script>
     // Configuration & State
-    const EPUB_URL = "https://raw.githubusercontent.com/Gamingmonster2/sahih-bukhari-reader/main/79565.epub";
+    const EPUB_URL = "./79565.epub";
     
     let book = null;
     let rendition = null;
@@ -287,17 +292,17 @@
     // Load and Render the EPUB Book
     async function initReader() {
       try {
-        updateLoadingStatus("جاري الاتصال بالخادم وتحميل ملف الكتاب...", 20);
+        updateLoadingStatus("جاري تهيئة محرك القراءة وتحميل ملف الكتاب...", 40);
         
-        // Fetch EPUB as ArrayBuffer to bypass potential CORS limitations with direct loading
-        const response = await fetch(EPUB_URL);
-        if (!response.ok) throw new Error(`فشل تحميل الكتاب من الخادم (رمز الخطأ: ${response.status})`);
-        
-        updateLoadingStatus("تم تحميل الملف. جاري معالجة البيانات...", 60);
-        const arrayBuffer = await response.arrayBuffer();
-        
-        updateLoadingStatus("جاري تهيئة محرك القراءة...", 80);
-        book = ePub(arrayBuffer);
+        book = ePub(EPUB_URL);
+
+        // Handle book load error
+        book.opened.catch(error => {
+          console.error("Book open error:", error);
+          elements.errorMessage.textContent = "تعذر فتح ملف الكتاب. يرجى التأكد من وجود الملف './79565.epub' في نفس المجلد.";
+          elements.errorOverlay.classList.remove('hidden');
+          elements.loadingOverlay.classList.add('hidden');
+        });
         
         // Determine spread configuration based on device width
         const isMobile = window.innerWidth < 768;
@@ -320,10 +325,36 @@
         setupKeyboardNavigation();
         setupRenditionEvents();
         
-        // Load Navigation (Table of Contents)
+        // Load Navigation (Table of Contents) safely
         book.loaded.navigation.then(toc => {
-          tocData = toc;
-          renderTOC(toc);
+          let rawItems = [];
+          if (toc && toc.toc) {
+            rawItems = toc.toc;
+          } else if (Array.isArray(toc)) {
+            rawItems = toc;
+          }
+
+          // Safe recursive function to flatten nested TOC items
+          function flattenTOC(arr) {
+            let result = [];
+            if (!Array.isArray(arr)) return result;
+            arr.forEach(item => {
+              result.push({
+                label: item.label ? item.label.trim() : "",
+                href: item.href || ""
+              });
+              if (item.subitems && item.subitems.length > 0) {
+                result = result.concat(flattenTOC(item.subitems));
+              }
+            });
+            return result;
+          }
+
+          tocData = flattenTOC(rawItems);
+          renderTOC(tocData);
+        }).catch(err => {
+          console.warn("Error loading navigation:", err);
+          elements.tocList.innerHTML = `<div class="p-4 text-center text-slate-400 dark:text-slate-500">تعذر تحميل الفهرس</div>`;
         });
 
         // Generate Locations for progress bar
@@ -335,6 +366,9 @@
           return book.locations.generate(1024);
         }).then(locations => {
           updateProgress();
+        }).catch(err => {
+          console.warn("Error generating locations:", err);
+          elements.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
         });
 
       } catch (error) {
@@ -404,8 +438,13 @@
     function renderTOC(toc, filter = "") {
       elements.tocList.innerHTML = "";
       
+      if (!Array.isArray(toc)) {
+        elements.tocList.innerHTML = `<div class="p-4 text-center text-slate-400 dark:text-slate-500">لا توجد نتائج مطابقة</div>`;
+        return;
+      }
+
       const filtered = toc.filter(item => 
-        item.label.toLowerCase().includes(filter.toLowerCase())
+        item.label && item.label.toLowerCase().includes(filter.toLowerCase())
       );
 
       if (filtered.length === 0) {
@@ -437,13 +476,15 @@
       const currentLocation = rendition.location;
       
       // Update Page Indicator
-      if (currentLocation.start) {
+      if (currentLocation.start && currentLocation.start.displayed) {
         const pageStr = `الصفحة ${currentLocation.start.displayed.page} من ${currentLocation.start.displayed.total}`;
         elements.pageIndicator.textContent = pageStr;
+      } else if (currentLocation.start) {
+        elements.pageIndicator.textContent = `الصفحة ${currentLocation.start.index + 1}`;
       }
 
       // Update progress bar
-      if (book.locations && book.locations.length() > 0) {
+      if (book.locations && typeof book.locations.percentageFromCfi === 'function' && book.locations.length() > 0) {
         const percent = book.locations.percentageFromCfi(currentLocation.start.cfi);
         const roundedPercent = Math.round(percent * 100);
         elements.readingProgress.style.width = `${roundedPercent}%`;
@@ -453,11 +494,14 @@
 
     // Update active chapter title in header
     function updateActiveChapterTitle() {
-      if (!rendition || !rendition.location || !tocData) return;
+      if (!rendition || !rendition.location || !tocData || tocData.length === 0) return;
       
       const currentHref = rendition.location.start.href;
       // Find the closest matching chapter in TOC
-      const chapter = tocData.find(item => item.href.split('#')[0] === currentHref.split('#')[0]);
+      const chapter = tocData.find(item => {
+        if (!item.href) return false;
+        return item.href.split('#')[0] === currentHref.split('#')[0];
+      });
       
       if (chapter) {
         elements.currentChapterTitle.textContent = chapter.label.trim();
@@ -476,6 +520,7 @@
       // Inject swipe detection inside iframe
       rendition.on("rendered", (section, view) => {
         const iframeDoc = view.document;
+        if (!iframeDoc) return;
         
         // Touch Gestures for mobile swiping
         let touchstartX = 0;
@@ -526,6 +571,7 @@
       setTimeout(() => elements.sidebarBackdrop.classList.add('opacity-100'), 10);
     }
 
+    // Close Sidebar Panel
     function closeSidebarPanel() {
       elements.sidebar.classList.add('translate-x-full');
       elements.sidebarBackdrop.classList.remove('opacity-100');
