@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>قارئ صحيح البخاري الإلكتروني</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              200: '#bbf7d0',
+              300: '#86efac',
+              400: '#4ade80',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+              800: '#166534',
+              900: '#14532d',
+              950: '#052e16',
+            },
+            amber: {
+              50: '#fffbeb',
+              100: '#fef3c7',
+              200: '#fde68a',
+              300: '#fcd34d',
+              400: '#fbbf24',
+              500: '#f59e0b',
+              600: '#d97706',
+              700: '#b45309',
+              800: '#92400e',
+              900: '#78350f',
+            }
+          },
+          fontFamily: {
+            sans: ['Tajawal', 'sans-serif'],
+            serif: ['Amiri', 'serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts (Tajawal & Amiri) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- EPUB.js & JSZip Dependencies -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    .dark ::-webkit-scrollbar-thumb {
+      background: #475569;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Elegant Pulse Animation */
+    @keyframes pulse-slow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.03); }
+    }
+    .pulse-slow {
+      animation: pulse-slow 3s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="h-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans transition-colors duration-300 flex flex-col overflow-hidden select-none">
+
+  <!-- Fullscreen Loading Overlay -->
+  <div id="loading-overlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 transition-all duration-500">
+    <div class="text-center max-w-md px-6">
+      <div class="relative inline-block mb-8">
+        <!-- Decorative Islamic Pattern Ring -->
+        <div class="w-24 h-24 rounded-full border-4 border-primary-600/20 border-t-primary-600 animate-spin"></div>
+        <i class="fa-solid fa-book-open text-4xl text-primary-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pulse-slow"></i>
+      </div>
+      <h2 class="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">جاري تحميل صحيح البخاري</h2>
+      <p class="text-slate-500 dark:text-slate-400 text-sm mb-6">يرجى الانتظار قليلاً أثناء جلب صفحات الكتاب وتنسيقها...</p>
+      
+      <!-- Progress Bar Container -->
+      <div class="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 mb-4 overflow-hidden">
+        <div id="loading-bar" class="bg-primary-600 h-full w-0 transition-all duration-300 rounded-full"></div>
+      </div>
+      <span id="loading-status" class="text-xs font-semibold text-primary-600 dark:text-primary-400">بدء الاتصال بالخادم...</span>
+    </div>
+  </div>
+
+  <!-- Error Modal -->
+  <div id="error-overlay" class="fixed inset-0 z-50 hidden flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm px-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-2xl border border-red-100 dark:border-red-900/30 text-center">
+      <div class="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+        <i class="fa-solid fa-triangle-exclamation text-2xl text-red-600 dark:text-red-400"></i>
+      </div>
+      <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-2">فشل تحميل الكتاب</h3>
+      <p id="error-message" class="text-slate-600 dark:text-slate-400 text-sm mb-6 leading-relaxed">تعذر الاتصال بمصدر الكتاب الرقمي. يرجى التحقق من اتصال الإنترنت أو المحاولة لاحقاً.</p>
+      <div class="flex gap-3">
+        <button onclick="window.location.reload()" class="flex-1 py-2.5 px-4 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition-colors text-sm">
+          إعادة المحاولة <i class="fa-solid fa-rotate-right mr-1"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Navigation Bar -->
+  <header class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 sticky top-0 z-30 transition-colors duration-300">
+    <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+      
+      <!-- Right: Sidebar Toggle & Title -->
+      <div class="flex items-center gap-3">
+        <button id="toggle-sidebar" class="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors text-slate-700 dark:text-slate-300" title="الفهرس">
+          <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+        <div>
+          <h1 class="font-bold text-base md:text-lg text-slate-900 dark:text-white flex items-center gap-2">
+            <span class="text-primary-600 dark:text-primary-400 hidden sm:inline"><i class="fa-solid fa-book-quran"></i></span>
+            صحيح البخاري
+          </h1>
+          <p id="current-chapter-title" class="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[180px] sm:max-w-[300px] font-medium">جاري جلب العنوان...</p>
+        </div>
+      </div>
+
+      <!-- Left: Accessibility Controls -->
+      <div class="flex items-center gap-1.5 sm:gap-2">
+        <!-- Font Size Decrement -->
+        <button id="font-dec" class="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors text-slate-700 dark:text-slate-300" title="تصغير الخط">
+          <span class="text-xs font-bold">A-</span>
+        </button>
+        <!-- Font Size Increment -->
+        <button id="font-inc" class="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors text-slate-700 dark:text-slate-300" title="تكبير الخط">
+          <span class="text-sm font-bold">A+</span>
+        </button>
+        
+        <div class="h-6 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1"></div>
+
+        <!-- Theme Toggle -->
+        <button id="toggle-theme" class="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors text-slate-700 dark:text-slate-300" title="تبديل المظهر">
+          <i class="fa-solid fa-moon dark:hidden"></i>
+          <i class="fa-solid fa-sun hidden dark:inline text-amber-500"></i>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <div class="flex-1 flex relative overflow-hidden">
+
+    <!-- Table of Contents Sidebar (Drawer) -->
+    <aside id="sidebar" class="fixed inset-y-0 right-0 z-40 w-80 bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-800/80 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col h-full pt-16">
+      <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <h3 class="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i class="fa-solid fa-list-ol text-primary-600"></i> فهرس الكتاب
+        </h3>
+        <button id="close-sidebar" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <!-- Search inside TOC -->
+      <div class="p-3 border-b border-slate-100 dark:border-slate-800">
+        <div class="relative">
+          <input id="toc-search" type="text" placeholder="ابحث عن باب أو حديث..." class="w-full pl-3 pr-9 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-sm focus:outline-none focus:border-primary-500 dark:focus:border-primary-500 transition-colors">
+          <i class="fa-solid fa-magnifying-glass absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+        </div>
+      </div>
+      <!-- TOC List Container -->
+      <div id="toc-list" class="flex-1 overflow-y-auto p-2 space-y-1 text-sm">
+        <!-- Dynamic content loaded here -->
+        <div class="p-4 text-center text-slate-400">جاري تحميل الفهرس...</div>
+      </div>
+    </aside>
+
+    <!-- Sidebar Backdrop Overlay -->
+    <div id="sidebar-backdrop" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-30 hidden transition-opacity duration-300"></div>
+
+    <!-- Reader Area Container -->
+    <main class="flex-1 flex flex-col items-center justify-between relative px-4 md:px-8 py-4 overflow-hidden">
+      
+      <!-- EPUB Viewport Container -->
+      <div class="w-full max-w-4xl flex-1 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/60 dark:border-slate-800/50 relative overflow-hidden transition-colors duration-300 flex items-center justify-center">
+        <!-- Render Target -->
+        <div id="viewer" class="w-full h-full"></div>
+
+        <!-- Desktop Navigation Floating Buttons -->
+        <button id="prev-btn" class="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/90 dark:bg-slate-800/90 hover:bg-primary-600 hover:text-white dark:hover:bg-primary-600 shadow-lg border border-slate-100 dark:border-slate-700/50 flex items-center justify-center transition-all duration-200 opacity-0 hover:opacity-100 md:opacity-80 group" title="الصفحة السابقة">
+          <i class="fa-solid fa-chevron-right text-lg group-hover:-translate-x-0.5 transition-transform"></i>
+        </button>
+        <button id="next-btn" class="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/90 dark:bg-slate-800/90 hover:bg-primary-600 hover:text-white dark:hover:bg-primary-600 shadow-lg border border-slate-100 dark:border-slate-700/50 flex items-center justify-center transition-all duration-200 opacity-0 hover:opacity-100 md:opacity-80 group" title="الصفحة التالية">
+          <i class="fa-solid fa-chevron-left text-lg group-hover:translate-x-0.5 transition-transform"></i>
+        </button>
+      </div>
+
+      <!-- Reader Footer / Mobile Control Bar -->
+      <div class="w-full max-w-4xl mt-4 flex flex-col sm:flex-row items-center justify-between gap-4 px-2">
+        <!-- Progress Bar & Indicator -->
+        <div class="w-full sm:w-auto flex items-center gap-3 flex-1 max-w-md">
+          <span class="text-xs font-semibold text-slate-500 whitespace-nowrap" id="progress-percent">0%</span>
+          <div class="flex-1 bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden relative">
+            <div id="reading-progress" class="bg-primary-600 h-full w-0 transition-all duration-300 rounded-full"></div>
+          </div>
+          <span class="text-xs font-semibold text-slate-500 whitespace-nowrap" id="page-indicator">الصفحة --</span>
+        </div>
+
+        <!-- Mobile Navigation Buttons -->
+        <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+          <button id="mobile-prev-btn" class="flex-1 sm:flex-initial py-2 px-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-center gap-2 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+            السابق <i class="fa-solid fa-chevron-right text-xs"></i>
+          </button>
+          <button id="mobile-next-btn" class="flex-1 sm:flex-initial py-2 px-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-center gap-2 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+            <i class="fa-solid fa-chevron-left text-xs"></i> التالي
+          </button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    // Configuration & State
+    const EPUB_URL = "https://raw.githubusercontent.com/Gamingmonster2/sahih-bukhari-reader/main/%D9%83%D8%AA%D8%A7%D8%A8%20%D8%A5%D9%84%D9%83%D8%AA%D8%B1%D9%88%D9%86%D9%8I%20(ePub)";
+    
+    let book = null;
+    let rendition = null;
+    let displayed = null;
+    let currentTheme = localStorage.getItem('theme') || 'light';
+    let fontSize = parseInt(localStorage.getItem('fontSize')) || 110; // default 110%
+    let tocData = [];
+
+    // DOM Elements
+    const elements = {
+      loadingOverlay: document.getElementById('loading-overlay'),
+      loadingBar: document.getElementById('loading-bar'),
+      loadingStatus: document.getElementById('loading-status'),
+      errorOverlay: document.getElementById('error-overlay'),
+      errorMessage: document.getElementById('error-message'),
+      sidebar: document.getElementById('sidebar'),
+      sidebarBackdrop: document.getElementById('sidebar-backdrop'),
+      toggleSidebar: document.getElementById('toggle-sidebar'),
+      closeSidebar: document.getElementById('close-sidebar'),
+      tocList: document.getElementById('toc-list'),
+      tocSearch: document.getElementById('toc-search'),
+      currentChapterTitle: document.getElementById('current-chapter-title'),
+      prevBtn: document.getElementById('prev-btn'),
+      nextBtn: document.getElementById('next-btn'),
+      mobilePrevBtn: document.getElementById('mobile-prev-btn'),
+      mobileNextBtn: document.getElementById('mobile-next-btn'),
+      fontInc: document.getElementById('font-inc'),
+      fontDec: document.getElementById('font-dec'),
+      toggleTheme: document.getElementById('toggle-theme'),
+      readingProgress: document.getElementById('reading-progress'),
+      progressPercent: document.getElementById('progress-percent'),
+      pageIndicator: document.getElementById('page-indicator')
+    };
+
+    // Initialize Theme
+    if (currentTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
+    // Load and Render the EPUB Book
+    async function initReader() {
+      try {
+        updateLoadingStatus("جاري الاتصال بالخادم وتحميل ملف الكتاب...", 20);
+        
+        // Fetch EPUB as ArrayBuffer to bypass potential CORS limitations with direct loading
+        const response = await fetch(EPUB_URL);
+        if (!response.ok) throw new Error(`فشل تحميل الكتاب من الخادم (رمز الخطأ: ${response.status})`);
+        
+        updateLoadingStatus("تم تحميل الملف. جاري معالجة البيانات...", 60);
+        const arrayBuffer = await response.arrayBuffer();
+        
+        updateLoadingStatus("جاري تهيئة محرك القراءة...", 80);
+        book = ePub(arrayBuffer);
+        
+        // Determine spread configuration based on device width
+        const isMobile = window.innerWidth < 768;
+        rendition = book.renderTo("viewer", {
+          width: "100%",
+          height: "100%",
+          spread: isMobile ? "none" : "auto",
+          flow: "paginated",
+          allowScriptedContent: true
+        });
+
+        // Load the default layout location
+        displayed = rendition.display();
+        
+        // Configure Themes & Fonts
+        registerRenditionThemes();
+        applyRenditionSettings();
+
+        // Setup Event Handlers
+        setupKeyboardNavigation();
+        setupRenditionEvents();
+        
+        // Load Navigation (Table of Contents)
+        book.loaded.navigation.then(toc => {
+          tocData = toc;
+          renderTOC(toc);
+        });
+
+        // Generate Locations for progress bar
+        book.ready.then(() => {
+          updateLoadingStatus("تم تحميل الكتاب بنجاح!", 100);
+          setTimeout(() => {
+            elements.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
+          }, 600);
+          return book.locations.generate(1024);
+        }).then(locations => {
+          updateProgress();
+        });
+
+      } catch (error) {
+        console.error("Initialization Error:", error);
+        elements.errorMessage.textContent = error.message || "حدث خطأ غير متوقع أثناء معالجة ملف الكتاب الإلكتروني.";
+        elements.errorOverlay.classList.remove('hidden');
+        elements.loadingOverlay.classList.add('hidden');
+      }
+    }
+
+    // Register Book Themes with Custom Injected CSS
+    function registerRenditionThemes() {
+      const commonStyles = {
+        'body': {
+          'direction': 'rtl !important',
+          'text-align': 'justify !important',
+          'font-family': "'Amiri', serif !important",
+          'line-height': '2 !important',
+          'padding': '0 20px !important',
+          '-webkit-font-smoothing': 'antialiased'
+        },
+        'p': {
+          'margin-bottom': '1.5em !important',
+          'text-indent': '0 !important'
+        },
+        'h1, h2, h3, h4, h5, h6': {
+          'font-family': "'Tajawal', sans-serif !important",
+          'font-weight': 'bold !important',
+          'color': 'inherit !important',
+          'margin-top': '1.5em !important',
+          'margin-bottom': '0.8em !important'
+        }
+      };
+
+      rendition.themes.register('light', {
+        ...commonStyles,
+        'body': {
+          ...commonStyles.body,
+          'background-color': '#ffffff !important',
+          'color': '#0f172a !important'
+        }
+      });
+
+      rendition.themes.register('dark', {
+        ...commonStyles,
+        'body': {
+          ...commonStyles.body,
+          'background-color': '#0f172a !important',
+          'color': '#f1f5f9 !important'
+        }
+      });
+    }
+
+    // Apply Settings (Font size, active theme)
+    function applyRenditionSettings() {
+      rendition.themes.select(currentTheme);
+      rendition.themes.fontSize(`${fontSize}%`);
+    }
+
+    // Helper to update loading progress UI
+    function updateLoadingStatus(text, percent) {
+      elements.loadingStatus.textContent = text;
+      elements.loadingBar.style.width = `${percent}%`;
+    }
+
+    // Render Table of Contents
+    function renderTOC(toc, filter = "") {
+      elements.tocList.innerHTML = "";
+      
+      const filtered = toc.filter(item => 
+        item.label.toLowerCase().includes(filter.toLowerCase())
+      );
+
+      if (filtered.length === 0) {
+        elements.tocList.innerHTML = `<div class="p-4 text-center text-slate-400 dark:text-slate-500">لا توجد نتائج مطابقة</div>`;
+        return;
+      }
+
+      filtered.forEach(chapter => {
+        const btn = document.createElement('button');
+        btn.className = "w-full text-right px-4 py-3 rounded-xl transition-all duration-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-start gap-2.5 text-slate-700 dark:text-slate-300 font-medium border border-transparent hover:border-slate-200/50 dark:hover:border-slate-700/50";
+        btn.innerHTML = `
+          <span class="text-primary-600 dark:text-primary-400 mt-1"><i class="fa-regular fa-bookmark"></i></span>
+          <span class="flex-1">${chapter.label.trim()}</span>
+        `;
+        
+        btn.addEventListener('click', () => {
+          rendition.display(chapter.href);
+          closeSidebarPanel();
+        });
+        
+        elements.tocList.appendChild(btn);
+      });
+    }
+
+    // Update Progress and Page indicators
+    function updateProgress() {
+      if (!rendition || !rendition.location) return;
+      
+      const currentLocation = rendition.location;
+      
+      // Update Page Indicator
+      if (currentLocation.start) {
+        const pageStr = `الصفحة ${currentLocation.start.displayed.page} من ${currentLocation.start.displayed.total}`;
+        elements.pageIndicator.textContent = pageStr;
+      }
+
+      // Update progress bar
+      if (book.locations && book.locations.length() > 0) {
+        const percent = book.locations.percentageFromCfi(currentLocation.start.cfi);
+        const roundedPercent = Math.round(percent * 100);
+        elements.readingProgress.style.width = `${roundedPercent}%`;
+        elements.progressPercent.textContent = `${roundedPercent}%`;
+      }
+    }
+
+    // Update active chapter title in header
+    function updateActiveChapterTitle() {
+      if (!rendition || !rendition.location || !tocData) return;
+      
+      const currentHref = rendition.location.start.href;
+      // Find the closest matching chapter in TOC
+      const chapter = tocData.find(item => item.href.split('#')[0] === currentHref.split('#')[0]);
+      
+      if (chapter) {
+        elements.currentChapterTitle.textContent = chapter.label.trim();
+      } else {
+        elements.currentChapterTitle.textContent = "صحيح البخاري";
+      }
+    }
+
+    // Setup Rendition Event Listeners (Swipe, Relocate, etc.)
+    function setupRenditionEvents() {
+      rendition.on('relocated', (location) => {
+        updateProgress();
+        updateActiveChapterTitle();
+      });
+
+      // Inject swipe detection inside iframe
+      rendition.on("rendered", (section, view) => {
+        const iframeDoc = view.document;
+        
+        // Touch Gestures for mobile swiping
+        let touchstartX = 0;
+        let touchendX = 0;
+        
+        iframeDoc.addEventListener('touchstart', e => {
+          touchstartX = e.changedTouches[0].screenX;
+        }, { passive: true });
+        
+        iframeDoc.addEventListener('touchend', e => {
+          touchendX = e.changedTouches[0].screenX;
+          handleSwipeGesture();
+        }, { passive: true });
+        
+        function handleSwipeGesture() {
+          const threshold = 60;
+          // In RTL layouts, swiping left goes to next page, right goes to previous page
+          if (touchendX < touchstartX - threshold) {
+            rendition.next();
+          }
+          if (touchendX > touchstartX + threshold) {
+            rendition.prev();
+          }
+        }
+
+        // Keydown support inside iframe
+        iframeDoc.addEventListener('keydown', handleKeyboardInput);
+      });
+    }
+
+    // Handle Keyboard Arrows for Navigation
+    function handleKeyboardInput(e) {
+      if (e.key === 'ArrowLeft') {
+        rendition.next();
+      } else if (e.key === 'ArrowRight') {
+        rendition.prev();
+      }
+    }
+
+    function setupKeyboardNavigation() {
+      document.addEventListener('keydown', handleKeyboardInput);
+    }
+
+    // Sidebar Control Functions
+    function openSidebarPanel() {
+      elements.sidebar.classList.remove('translate-x-full');
+      elements.sidebarBackdrop.classList.remove('hidden');
+      setTimeout(() => elements.sidebarBackdrop.classList.add('opacity-100'), 10);
+    }
+
+    function closeSidebarPanel() {
+      elements.sidebar.classList.add('translate-x-full');
+      elements.sidebarBackdrop.classList.remove('opacity-100');
+      setTimeout(() => elements.sidebarBackdrop.classList.add('hidden'), 300);
+    }
+
+    // Event Listeners for UI controls
+    elements.toggleSidebar.addEventListener('click', openSidebarPanel);
+    elements.closeSidebar.addEventListener('click', closeSidebarPanel);
+    elements.sidebarBackdrop.addEventListener('click', closeSidebarPanel);
+
+    // Live search in Table of Contents
+    elements.tocSearch.addEventListener('input', (e) => {
+      renderTOC(tocData, e.target.value);
+    });
+
+    // Font Controls
+    elements.fontInc.addEventListener('click', () => {
+      if (fontSize < 200) {
+        fontSize += 10;
+        localStorage.setItem('fontSize', fontSize);
+        applyRenditionSettings();
+      }
+    });
+
+    elements.fontDec.addEventListener('click', () => {
+      if (fontSize > 80) {
+        fontSize -= 10;
+        localStorage.setItem('fontSize', fontSize);
+        applyRenditionSettings();
+      }
+    });
+
+    // Theme Toggle Control
+    elements.toggleTheme.addEventListener('click', () => {
+      if (currentTheme === 'light') {
+        currentTheme = 'dark';
+        document.documentElement.classList.add('dark');
+      } else {
+        currentTheme = 'light';
+        document.documentElement.classList.remove('dark');
+      }
+      localStorage.setItem('theme', currentTheme);
+      applyRenditionSettings();
+    });
+
+    // Navigation Button Actions
+    elements.prevBtn.addEventListener('click', () => rendition.prev());
+    elements.nextBtn.addEventListener('click', () => rendition.next());
+    elements.mobilePrevBtn.addEventListener('click', () => rendition.prev());
+    elements.mobileNextBtn.addEventListener('click', () => rendition.next());
+
+    // Window Resize Handling (Adapts rendering flow)
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        if (rendition) {
+          const isMobile = window.innerWidth < 768;
+          rendition.resize("100%", "100%");
+          // Dynamic spread layout adaptation
+          rendition.spread(isMobile ? "none" : "auto");
+        }
+      }, 250);
+    });
+
+    // Start App
+    initReader();
+  </script>
+</body>
+</html>
